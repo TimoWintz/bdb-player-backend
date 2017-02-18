@@ -1,13 +1,17 @@
 from flask import Flask
+from flask import redirect
+from flask import make_response
 from flask_restful import Resource, Api, abort
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.sql import or_
 from flask_restful import reqparse
 from flask import send_from_directory, send_file
+from re import findall
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///library.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['BASE_PATH'] = '/home/twintz/Musique/'
 api = Api(app)
 db = SQLAlchemy(app)
 
@@ -126,10 +130,28 @@ class AlbumAPI(genericSingle):
     Object = Albums
     objectStr = "album"
 
+class FoldersAPI(Resource):
+    def get(self):
+        parser = reqparse.RequestParser()
+        parser.add_argument('prefix')
+        args = parser.parse_args()
+        path = ''
+        if args['prefix']:
+            path = args['prefix']
+            if not path[-1] == '/':
+                path = path + '/'
+        prefix = app.config['BASE_PATH'] + path 
+        query = Items.query.filter(Items.path.like(prefix + '%'))
+        subfolders = {item.path.decode('utf-8')[len(prefix):].split('/')[0] for item in query.all()}
+        subfolders = list(subfolders)
+        subfolders.sort()
+        ids = range(len(subfolders))
+        return { 'data' : [ { 'attributes' : { 'name' : subfolders[i] }, "id" : ids[i]} for i in range(len(subfolders))]}
 
-api.add_resource(ItemsAPI, '/api/items/')
+api.add_resource(ItemsAPI, '/api/items', '/api/items/')
 api.add_resource(ItemAPI, '/api/items/<request_id>')
-api.add_resource(AlbumsAPI, '/api/albums/')
+api.add_resource(FoldersAPI, '/api/files', '/api/files/')
+api.add_resource(AlbumsAPI, '/api/albums', '/api/albums/')
 api.add_resource(AlbumAPI, '/api/albums/<request_id>')
 
 # Files
@@ -143,7 +165,8 @@ mimetypes = {'MP3': 'audio/mpeg',
 def file(item_id):
     item = Items.query.filter_by(id=item_id).first()
     path = item.path.decode('utf-8')
-    return send_file(path, mimetype=mimetypes[item.format])
+    server_path = path.replace(app.config['BASE_PATH'], '/music/')
+    return redirect(server_path)
 
 # UI.
 
