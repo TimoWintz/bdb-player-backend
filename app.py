@@ -194,7 +194,7 @@ def file(item_id):
     item = Items.query.filter_by(id=item_id).first()
     path = item.path.decode('utf-8')
     server_path = path.replace(app.config['BASE_PATH'], '/music/')
-    server_path = urllib.quote(server_path)
+    server_path = urllib.parse.quote(server_path)
     return redirect(server_path)
 
 # UI.
