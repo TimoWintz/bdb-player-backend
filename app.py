@@ -7,6 +7,7 @@ from sqlalchemy.sql import or_
 from flask_restful import reqparse
 from flask import send_from_directory, send_file
 from re import findall
+import hashlib
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///library.db'
@@ -75,6 +76,7 @@ class genericAPI(Resource):
         parser.add_argument('filter[search]')
         parser.add_argument('page[number]')
         parser.add_argument('page[size]')
+        parser.add_argument('filter[path]')
         args = parser.parse_args()
         filter_dict = dict()
         search = [getattr(self.Object, x).asc()
@@ -84,6 +86,11 @@ class genericAPI(Resource):
             if args['filter[' + name + ']']:
                 filter_dict[name] = args['filter[' + name + ']']
         query = query.filter_by(**filter_dict)
+        if args['filter[path]']:
+            prefix = args['filter[path]']
+            prefix = app.config['BASE_PATH'] + prefix 
+            query = self.Object.query.filter(self.Object.path.like(prefix + '%'))
+            query = query.order_by(*search)
         if args['filter[search]']:
             selection = [getattr(self.Object, col).ilike(
                 '%' + args['filter[search]'] + '%')
@@ -98,6 +105,7 @@ class genericAPI(Resource):
                     'data': [self.format(item) for item in items]}
         else:
             items = query.all()
+            print(items)
             return {'data': [self.format(item) for item in items]}
 
 
@@ -133,24 +141,43 @@ class AlbumAPI(genericSingle):
 class FoldersAPI(Resource):
     def get(self):
         parser = reqparse.RequestParser()
-        parser.add_argument('prefix')
+        parser.add_argument('filter[prefix]')
+        parser.add_argument('filter[search]')
         args = parser.parse_args()
         path = ''
-        if args['prefix']:
-            path = args['prefix']
+        search = [getattr(Items, x).asc()
+                  for x in Items.defaultSort]
+        if args['filter[prefix]']:
+            path = args['filter[prefix]']
             if not path[-1] == '/':
                 path = path + '/'
         prefix = app.config['BASE_PATH'] + path 
         query = Items.query.filter(Items.path.like(prefix + '%'))
-        subfolders = {item.path.decode('utf-8')[len(prefix):].split('/')[0] for item in query.all()}
+        query = query.order_by(*search)
+        if args['filter[search]']:
+            selection = [getattr(Items, col).ilike(
+                '%' + args['filter[search]'] + '%')
+                           for col in Items.searchFields]
+            query = query.filter(or_(*selection))
+        items = query.all()
+        def aux_subfolder(item):
+            if len(item.path.decode('utf-8')[len(prefix):].split('/')) > 1:
+                return (True, item.path.decode('utf-8')[len(prefix):].split('/')[0])
+            else:
+                return (False, item.path.decode('utf-8')[len(prefix):].split('/')[0])
+
+        subfolders = {aux_subfolder(item)[1] for item in items if aux_subfolder(item)[0] }
         subfolders = list(subfolders)
         subfolders.sort()
-        ids = range(len(subfolders))
-        return { 'data' : [ { 'attributes' : { 'name' : subfolders[i] }, "id" : ids[i]} for i in range(len(subfolders))]}
+        files = [aux_subfolder(item)[1] for item in items if not aux_subfolder(item)[0]]
+        ids_files = [item.id for item in items if not aux_subfolder(item)[0]]
+        ids = [int(hashlib.sha256(x.encode('utf-8')).hexdigest(), 16) for x in subfolders]
+        return { 'data' : [ { 'attributes' : { 'name' : subfolders[i], 'folder' : True}, "id" : ids[i], "type" : "folder"} for i in range(len(subfolders))] +
+                [ { 'attributes' : { 'name' : files[i], 'folder' : False}, "id" : ids_files[i], "type" : "folder"} for i in range(len(files))]}
 
 api.add_resource(ItemsAPI, '/api/items', '/api/items/')
 api.add_resource(ItemAPI, '/api/items/<request_id>')
-api.add_resource(FoldersAPI, '/api/files', '/api/files/')
+api.add_resource(FoldersAPI, '/api/folders', '/api/folders/')
 api.add_resource(AlbumsAPI, '/api/albums', '/api/albums/')
 api.add_resource(AlbumAPI, '/api/albums/<request_id>')
 
