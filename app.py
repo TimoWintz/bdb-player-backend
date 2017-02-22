@@ -8,6 +8,7 @@ from flask_restful import reqparse
 from flask import send_from_directory, send_file
 from re import findall
 import hashlib
+import urllib
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///library.db'
@@ -193,6 +194,7 @@ def file(item_id):
     item = Items.query.filter_by(id=item_id).first()
     path = item.path.decode('utf-8')
     server_path = path.replace(app.config['BASE_PATH'], '/music/')
+    server_path = urllib.quote(server_path)
     return redirect(server_path)
 
 # UI.
