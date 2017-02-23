@@ -11,9 +11,9 @@ import hashlib
 import urllib
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///library.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['BASE_PATH'] = '/home/twintz/Musique/'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + app.config['BASE_PATH'] + 'library.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 api = Api(app)
 db = SQLAlchemy(app)
 
