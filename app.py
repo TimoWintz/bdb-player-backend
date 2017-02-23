@@ -191,6 +191,8 @@ mimetypes = {'MP3': 'audio/mpeg',
 
 @app.route('/file/<item_id>')
 def file(item_id):
+    item_id = item_id.split('.')[0]
+    item = Items.query.filter_by(id=item_id).first()
     item = Items.query.filter_by(id=item_id).first()
     path = item.path.decode('utf-8')
     server_path = path.replace(app.config['BASE_PATH'], '/music/')
